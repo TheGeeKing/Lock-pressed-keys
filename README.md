@@ -1,2 +1,3 @@
 # Lock pressed keys
- Set a key when pressed will lock previous keys in down position. Cool for games with no auto-run key.
+
+Define a key that, when pressed, locks the previous keys in the down position. Ideal for games without an auto run key.
