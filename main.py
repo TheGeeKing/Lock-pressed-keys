@@ -1,3 +1,4 @@
+import concurrent.futures
 import os
 import sys
 import threading
@@ -11,13 +12,14 @@ if getattr(sys, 'frozen', False): # Running as compiled
     os.chdir(sys._MEIPASS) # change current working directory to sys._MEIPASS
 
 sg.theme('DarkAmber')
-layout = [[sg.Text('Set the key to detect:'), sg.Button('Click Me!', key='-SELECT-')], [sg.Text('Choose mod:'), sg.Radio('Last key', group_id='', default=True, key='-1-')], [sg.Radio('Last X keys', group_id='', default=False, key='-2-'), sg.Slider(range=(2,10), default_value=2, orientation='horizontal', key='-SLIDER-')], [sg.Button('START', key='-START-')]]
+layout = [[sg.Text('Set the key to detect:'), sg.Button('Click Me!', key = '-SELECT-')], [sg.Text('Last X keys'), sg.Slider(range = (1, 10), default_value = 1, orientation = 'horizontal', key = '-SLIDER-')], [sg.Button('START', key = '-START-')]]
 
-window = sg.Window('Useful Key', layout, icon="MMA.ico")
+window = sg.Window('Lock pressed keys', layout, icon = "MMA.ico")
 
 class UsefulKey:
-    def __init__(self):
+    def __init__(self, key):
         self.do_run = False
+        self.key = key
 
     def check_useful_key_pressed(self):
         thread = threading.current_thread()
@@ -29,8 +31,7 @@ class UsefulKey:
                 else:
                     self.do_run = True
                     save_queue = queue.clean_queue()
-                    threading.Thread(target=self.keep_key_pressed, args=(save_queue,)).start()
-
+                    threading.Thread(target = self.keep_key_pressed, args = (save_queue, )).start()
 
     def keep_key_pressed(self, save_queue: list):
         while self.do_run:
@@ -39,11 +40,8 @@ class UsefulKey:
         for element in save_queue:
             pyautogui.keyUp(element)
 
-
-useful_key = UsefulKey()
-
 class Queue:
-    def __init__(self, maxsize: int=10, n: int=1):
+    def __init__(self, maxsize: int = 10, n: int = 1):
         self.maxsize = maxsize
         self.n = n
         self.queue = []
@@ -64,6 +62,10 @@ class Queue:
                 r.append(element)
         return r[-self.n:]
 
+def set_useful_key():
+    while True:
+        if keyboard.read_key():
+            return keyboard.read_key()
 
 def register_keys():
     while queue.can_change:
@@ -72,31 +74,25 @@ def register_keys():
 run = False
 
 while True:
-    event, values = window.Read(timeout=100)
+    event, values = window.Read(timeout = 100)
     if event is None or event in [sg.WIN_CLOSED]:
         os._exit(0)
     if event == '-SELECT-':
-        while True:
-            if keyboard.read_key():
-                useful_key.key = keyboard.read_key()
-                break
-        window["-SELECT-"].Update(text=f'{useful_key.key}')
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            useful_key = UsefulKey(executor.submit(set_useful_key).result())
+        window["-SELECT-"].Update(text = f'{useful_key.key}')
     if event == '-START-' and hasattr(useful_key, 'key'):
-        if window['-2-'].get():
-            queue = Queue(maxsize=values['-SLIDER-']*3+10 if values['-SLIDER-']*3<12 else values['-SLIDER-']*3, n=int(values['-SLIDER-'] if window['-2-'].get() else 1))
-        else:
-            queue = Queue(maxsize=10)
+        queue = Queue(maxsize = values['-SLIDER-']*3+10 if values['-SLIDER-'] < 4 else values['-SLIDER-']*3, n = int(values['-SLIDER-']))
         if run == True:
             run = False
             queue.can_change = False
             thread.do_run = False
-            window["-START-"].Update(text='START')
-
+            window["-START-"].Update(text = 'START')
         else:
             run = True
             queue.can_change = True
-            window["-START-"].Update(text='STOP')
-            threading.Thread(target=register_keys).start()
-            thread = threading.Thread(target=useful_key.check_useful_key_pressed)
+            window["-START-"].Update(text = 'STOP')
+            threading.Thread(target = register_keys).start()
+            thread = threading.Thread(target = useful_key.check_useful_key_pressed)
             thread.do_run = True
             thread.start()
